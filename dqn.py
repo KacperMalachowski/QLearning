@@ -69,7 +69,7 @@ class DQN:
     learning_rate=0.001,
     epsilon = 1.0,
     epsilon_min=0.1,
-    epsilon_decay=0.9999,
+    epsilon_decay=0.99,
     gamma=0.95,
     batch_size=64,
     warmup_steps=1000,
