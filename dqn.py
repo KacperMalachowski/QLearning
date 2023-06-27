@@ -66,7 +66,7 @@ class DQN:
       (-1, 0, 0.2), (0, 0, 0.2), (1, 0, 0.2),
       (-1, 0, 0), (0, 0, 0), (1, 0, 0)
     ],
-    learning_rate=0.01,
+    learning_rate=0.001,
     epsilon = 1.0,
     epsilon_min=0.01,
     epsilon_decay=0.99,
