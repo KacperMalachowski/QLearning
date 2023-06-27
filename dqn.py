@@ -107,7 +107,7 @@ class DQN:
     # model.add(Flatten())
     # model.add(Dense(512, activation='relu'))
     # model.add(Dense(len(action_dim), activation='linear'))
-    model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate), metrics=['accuracy'])
+    model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate, epsilon=1e-7), metrics=['accuracy'])
     return model
   
   def act(self, state, training=True):
