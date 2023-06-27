@@ -4,10 +4,10 @@ import random
 import time
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Flatten, Dense, Reshape
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import TensorBoard
+from keras.models import Sequential
+from keras.layers import Flatten, Dense, Reshape
+from keras.optimizers import Adam
+from keras.callbacks import TensorBoard
 from collections import deque
 
 log_dir="logs/{}-{}".format("DQN", int(time.time()))
@@ -66,14 +66,14 @@ class DQN:
       (-1, 0, 0.2), (0, 0, 0.2), (1, 0, 0.2),
       (-1, 0, 0), (0, 0, 0), (1, 0, 0)
     ],
-    learning_rate=0.001,
+    learning_rate=0.01,
     epsilon = 1.0,
-    epsilon_min=0.1,
+    epsilon_min=0.01,
     epsilon_decay=0.99,
     gamma=0.95,
-    batch_size=64,
+    batch_size=32,
     warmup_steps=1000,
-    buffer_size=5000,
+    buffer_size=2500,
     target_update_interval=1000,
   ): 
     self.action_dim = action_dim
