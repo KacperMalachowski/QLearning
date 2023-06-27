@@ -5,7 +5,7 @@ import tensorflow as tf
 from env import ImageEnv
 from dqn import DQN
 
-env = gym.make('CarRacing-v2')
+env = gym.make('CarRacing-v2', render_mode='human')
 env = ImageEnv(env)
 
 state_dim = (84, 84)
@@ -25,7 +25,7 @@ try:
     print(f"Episode: {i}/{episodes}") 
     agent.tensorboard.step = i
     start_time = time.time()
-    state, info = env.reset()
+    state, info = env.reset(seed=4)
     done = False
     index = 0
     total_reward = 0
