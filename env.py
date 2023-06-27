@@ -18,7 +18,8 @@ class ImageEnv(gym.Wrapper):
 
   def _preprocess(self, img):
     img = cv2.resize(img, dsize=(84,84))
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
     return img
 
   def reset(self, **kwargs):

@@ -5,7 +5,7 @@ import tensorflow as tf
 from env import ImageEnv
 from dqn import DQN
 
-env = gym.make('CarRacing-v2', render_mode='human')
+env = gym.make('CarRacing-v2')
 env = ImageEnv(env)
 
 state_dim = (84, 84)
@@ -19,9 +19,9 @@ rewards = 0
 time_sum = 0
 
 total_rewards = []
-
+i = 1
 try:
-  for i in range(1, episodes + 1):
+  while agent.epsilon > agent.epsilon_min:
     print(f"Episode: {i}/{episodes}") 
     agent.tensorboard.step = i
     start_time = time.time()
@@ -46,5 +46,6 @@ try:
 
     agent.tensorboard.update_stats(reward=total_reward,reward_min=min(total_rewards), reward_max=max(total_rewards), reward_avg=sum(total_rewards)/len(total_rewards), epsilon=agent.epsilon)
     agent.replay()
+    i += 1
 finally:
   agent.save("dqn.h5")

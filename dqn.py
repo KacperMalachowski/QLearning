@@ -8,6 +8,7 @@ from keras.models import Sequential
 from keras.layers import Flatten, Dense, Reshape
 from keras.optimizers import Adam
 from keras.callbacks import TensorBoard
+from keras import backend as BK
 from collections import deque
 
 log_dir="logs/{}-{}".format("DQN", int(time.time()))
@@ -43,6 +44,12 @@ class ModifiedTensorBoard(TensorBoard):
 
     def on_train_batch_end(self, batch, logs=None):
         pass
+    
+    def on_test_begin(self, logs=None):
+       pass
+    
+    def on_test_end(self, logs=None):
+       pass
 
     # Custom method for saving own metrics
     # Creates writer, writes custom metrics and closes writer
@@ -66,12 +73,12 @@ class DQN:
       (-1, 0, 0.2), (0, 0, 0.2), (1, 0, 0.2),
       (-1, 0, 0), (0, 0, 0), (1, 0, 0)
     ],
-    learning_rate=0.001,
+    learning_rate=0.0000025,
     epsilon = 1.0,
     epsilon_min=0.01,
-    epsilon_decay=0.99,
+    epsilon_decay=0.9999,
     gamma=0.95,
-    batch_size=32,
+    batch_size=256,
     warmup_steps=1000,
     buffer_size=2500,
     target_update_interval=1000,
@@ -96,18 +103,14 @@ class DQN:
 
     self.tensorboard = ModifiedTensorBoard("DQN", log_dir=log_dir)
     
+  
   def build_model(self, state_dim, action_dim):
     model = Sequential()
     model.add(Reshape(target_shape=(*state_dim, 1), input_shape=state_dim, name='layers_reshape'))
     model.add(Flatten(name='layes_flatten'))
     model.add(Dense(5, activation='relu', name = 'layers_dense'))
-    model.add(Dense(len(action_dim), activation='relu', name = 'layers_action_dense'))
-    # model.add(Dense(24, activation='relu'))
-    # model.add(Dense(24, activation='relu'))
-    # model.add(Flatten())
-    # model.add(Dense(512, activation='relu'))
-    # model.add(Dense(len(action_dim), activation='linear'))
-    model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate, epsilon=1e-7), metrics=['accuracy'])
+    model.add(Dense(len(action_dim), activation='linear', name = 'layers_action_dense'))
+    model.compile(loss='categorical_crossentropy', optimizer=Adam(learning_rate=self.learning_rate), metrics=['accuracy'])
     return model
   
   def act(self, state, training=True):
@@ -116,6 +119,8 @@ class DQN:
     else:
       action_probs = self.network.predict(state, verbose=0)
       action = np.argmax(action_probs[0])
+      print(action)
+      print(self.action_dim[action])
     return self.action_dim[action]
   
   def remember(self, state, action, reward, next_state, terminated, truncated):
@@ -147,7 +152,8 @@ class DQN:
       tf.stack(targets),
       epochs=1,
       verbose=0,
-      callbacks=[self.tensorboard]
+      callbacks=[self.tensorboard],
+      validation_split=0.1
     )
 
     if self.total_steps % self.target_update_interval == 0:
