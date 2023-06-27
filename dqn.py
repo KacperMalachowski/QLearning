@@ -86,7 +86,7 @@ class DQN:
     self.learning_rate = learning_rate
     self.network = self.build_model(state_dim, action_dim)
     self.target_network = self.build_model(state_dim, action_dim)
-    self._update_target_model()
+    self._update_target_model(tau=1.0)
 
     self.buffer = deque(maxlen=buffer_size)
 
@@ -151,13 +151,14 @@ class DQN:
     )
 
     if self.total_steps % self.target_update_interval == 0:
-      self._update_target_model()
+      self._update_target_model(tau=0.01)
 
     if self.epsilon > self.epsilon_min:
       self.epsilon *= self.epsilon_decay
   
-  def _update_target_model(self):
-    self.target_network.set_weights(self.network.get_weights())
+  def _update_target_model(self, tau):
+    for target_weight, online_weight in zip(self.target_network.trainable_variables, self.network.trainable_variables):
+       target_weight.assign(target_weight * (1.0 - tau) + online_weight * tau)
   
   def load(self, name, ignore_epsilon=False):
     with open(name, "rb") as f:
