@@ -1,13 +1,23 @@
+import gc
 import os
 import time
 import gymnasium as gym
-import tensorflow as tf
+import numpy as np
 from dqn import DQN
+from utils import plotLearning
 
-env = gym.make('LunarLander-v2')
-episodes = 1000
+env = gym.make('LunarLander-v2', render_mode='human')
 
-agent = DQN(env.observation_space.shape, env.action_space)
+agent = DQN(
+  state_dim=8, 
+  action_number=4, 
+  gamma=0.99, 
+  epsilon=1.0,
+  learning_rate=0.0005,
+  buffer_size=1000,
+  batch_size=64,
+  epsilon_min=0.01
+)
 if os.path.isfile('./dqn.h5'):
   agent.load('./dqn.h5')
 
@@ -15,15 +25,15 @@ rewards = 0
 time_sum = 0
 
 total_rewards = []
+eps_history = []
 i = 1
+episodes = 500
 try:
-  while agent.epsilon > agent.epsilon_min:
+  while i < episodes:
     print(f"Episode: {i}/{episodes}") 
-    agent.tensorboard.step = i
     start_time = time.time()
     state, info = env.reset(seed=4)
     done = False
-    index = 0
     total_reward = 0
 
     while not done:
@@ -35,14 +45,25 @@ try:
       agent.remember(state, action, reward, next_state, terminated, truncated)
 
       state = next_state
-      index += 1
       total_reward += reward
+
+      agent.replay()
     
     total_rewards.append(total_reward)
+    eps_history.append(agent.epsilon)
 
-    agent.tensorboard.update_stats(reward=total_reward,reward_min=min(total_rewards), reward_max=max(total_rewards), reward_avg=sum(total_rewards)/len(total_rewards), epsilon=agent.epsilon)
-    agent.replay()
-    print(f" {agent.buffer.__len__()}")
+    avg_reward = np.mean(total_rewards[max(0, i-100): (i+1)])
+    print(" Reward: %.2f" % total_reward, "Avg Reward: %.2f" % avg_reward)
+
+    if i % 10 == 0 and i > 0:
+      x = [j for j in range(i)]
+      plotLearning(x, total_rewards, eps_history, f"lunar_{i}.png")
+
     i += 1
+
+  x = [x + 1 for i in range(episodes)]
+  plotLearning(x, total_rewards, eps_history, "lunar.png")
+
+
 finally:
   agent.save("dqn.h5")

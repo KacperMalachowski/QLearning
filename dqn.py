@@ -1,179 +1,101 @@
-import os
+import gc
 import pickle
-import random
 import time
 import numpy as np
-import tensorflow as tf
-from keras.models import Sequential
-from keras.layers import Flatten, Dense, Reshape
-from keras.optimizers import Adam
-from keras.callbacks import TensorBoard
-from keras import backend as BK
-from collections import deque
+import torch
+import torch.nn as nn
+import torch.optim as optim
 
 from memory import ReplayMemory
 
-log_dir="logs/{}-{}".format("DQN", int(time.time()))
-
-class ModifiedTensorBoard(TensorBoard):
-    # Overriding init to set initial step and writer (we want one log file for all .fit() calls)
-    def __init__(self, name, **kwargs):
-        super().__init__(**kwargs)
-        self.step = 1
-        self.writer = tf.summary.create_file_writer(self.log_dir)
-        self._log_write_dir = os.path.join(self.log_dir, name)
-
-    # Overriding this method to stop creating default log writer
-    def set_model(self, model):
-       pass
-
-    # Overrided, saves logs with our step number
-    # (otherwise every .fit() will start writing from 0th step)
-    def on_epoch_end(self, epoch, logs=None):
-        self.update_stats(**logs)
-
-    # Overrided
-    # We train for one batch only, no need to save anything at epoch end
-    def on_batch_end(self, batch, logs=None):
-        pass
-
-    def on_train_begin(self, logs=False):
-       pass
-
-    # Overrided, so won't close writer
-    def on_train_end(self, _):
-        pass
-
-    def on_train_batch_end(self, batch, logs=None):
-        pass
-    
-    def on_test_begin(self, logs=None):
-       pass
-    
-    def on_test_end(self, logs=None):
-       pass
-
-    # Custom method for saving own metrics
-    # Creates writer, writes custom metrics and closes writer
-    def update_stats(self, **stats):
-        self._write_logs(stats, self.step)
-
-    def _write_logs(self, logs, index):
-        with self.writer.as_default():
-            for name, value in logs.items():
-                tf.summary.scalar(name, value, step=index)
-                self.step += 1
-                self.writer.flush()
 
 class DQN:
   def __init__(
     self,
     state_dim,
-    action_dim,
+    action_number,
     learning_rate=0.0001,
     epsilon = 1.0,
     epsilon_min=0.01,
     epsilon_decay=0.999,
     gamma=0.99,
     batch_size=128,
-    warmup_steps=1000,
     buffer_size=2000,
-    target_update_interval=1000,
   ): 
-    self.action_dim = action_dim
-    self.epsilon = epsilon
+    self.action_space = [i for i in range(action_number)]
     self.gamma = gamma
-    self.batch_size = batch_size
-    self.warmup_steps = warmup_steps
-    self.target_update_interval = target_update_interval
-
-    self.learning_rate = learning_rate
-    self.network = self.build_model(state_dim, action_dim)
-    self.target_network = self.build_model(state_dim, action_dim)
-    self._update_target_model(tau=1.0)
-
-    self.buffer = ReplayMemory(maxlen=buffer_size)
-
-    self.total_steps = 0
-    self.epsilon_min = epsilon_min
+    self.epsilon = epsilon
     self.epsilon_decay = epsilon_decay
+    self.epsilon_min = epsilon_min
+    self.batch_size = batch_size
+    self.learning_rate = learning_rate
+    
+    self.memory = ReplayMemory(state_dim, action_number, discrete=True, maxlen=buffer_size)
 
-    self.tensorboard = ModifiedTensorBoard("DQN", log_dir=log_dir)
+    self.network = self.build_model(state_dim, action_number)
     
   
-  def build_model(self, state_dim, action_dim):
-    model = Sequential()
-    model.add(Dense(64, activation='relu', input_shape=state_dim))
-    model.add(Dense(64, activation='relu'))
-    model.add(Dense(action_dim.n, activation='linear'))
-    model.compile(loss='mae', optimizer=Adam(learning_rate=self.learning_rate), metrics=['accuracy'])
+  def build_model(self, state_dim, action_number):
+    model = Sequential([
+       Dense(256, input_shape=(state_dim, )),
+       Activation('relu'),
+       Dense(256),
+       Activation('relu'),
+       Dense(action_number)
+    ])
+    model.compile(optimizer=Adam(lr=self.learning_rate), loss='mse')
     return model
   
   def act(self, state, training=True):
-    if training and np.random.rand() < self.epsilon:
-      action = random.randrange(self.action_dim.n)
+    state = state[np.newaxis, :]
+    rand = np.random.random()
+
+    if rand < self.epsilon:
+      action = np.random.choice(self.action_space)
     else:
-      action_probs = self.network.predict(np.expand_dims(state, axis=0), verbose=0)
-      action = np.argmax(action_probs[0])
+      actions = self.network.predict(state, verbose=0)
+      action = np.argmax(actions)
+
     return action
   
   def remember(self, state, action, reward, next_state, terminated, truncated):
-    self.buffer.append((state, action, reward, next_state, terminated, truncated))
-    self.total_steps += 1
+    self.memory.append(state, action, reward, next_state, terminated or truncated)
 
   def replay(self):
-    if len(self.buffer) < self.batch_size:
+    if self.memory.mem_counter < self.batch_size:
       return
     
-    sample_batch = self.buffer.sample(batch_size=self.batch_size)
+    state, action, reward, new_state, done = self.memory.sample(self.batch_size)
 
-    states = []
-    targets = []
+    action_values = np.array(self.action_space, dtype=np.int8)
+    action_indices = np.dot(action, action_values)
 
-    for state, action, reward, next_state, terminated, truncated in sample_batch:
-      target = self.network.predict(np.expand_dims(state, axis=0), verbose= 0)
-      if terminated or truncated:
-        target[0][action] = reward
-      else:
-        next_q_values = self.target_network.predict(np.expand_dims(state, axis=0), verbose=0)
-        target[0][action] = reward + self.gamma * np.amax(next_q_values)
+    q_eval = self.network.predict(state, verbose=0)
+    q_next = self.network.predict(new_state, verbose=0)
 
-      states.append(state)
-      targets.append(target)
+    q_target =  q_eval.copy()
 
-    self.network.fit(
-      tf.stack(states),
-      tf.stack(targets),
-      epochs=1,
-      callbacks=[self.tensorboard]
-    )
+    batch_index = np.arange(self.batch_size, dtype=np.int32)
 
-    if self.total_steps % self.target_update_interval == 0:
-      self._update_target_model(tau=0.01)
+    q_target[batch_index, action_indices] = reward + self.gamma * np.max(q_next, axis=1) * done
 
-    if self.epsilon > self.epsilon_min:
-      self.epsilon *= self.epsilon_decay
-  
-  def _update_target_model(self, tau):
-    for target_weight, online_weight in zip(self.target_network.trainable_variables, self.network.trainable_variables):
-       target_weight.assign(target_weight * (1.0 - tau) + online_weight * tau)
+    self.network.fit(state, q_target, verbose=0)
+    keras.backend.clear_session()
+
+    self.epsilon = self.epsilon * self.epsilon_decay if self.epsilon > self.epsilon_min else self.epsilon_min
   
   def load(self, name, ignore_epsilon=False):
     with open(name, "rb") as f:
       store = pickle.load(f)
 
       self.network.set_weights(store['Train'])
-      self.target_network.set_weights(store['Weights'])
       
       if not ignore_epsilon:
-        self.steps = store['Steps']
         self.epsilon = store['Epsilon']
 
   def save(self, name):
     store = {
       'Train': self.network.get_weights(),
-      'Weights': self.target_network.get_weights(),
-      'Steps': self.total_steps,
       'Epsilon': self.epsilon
     }
 
