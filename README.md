@@ -28,10 +28,10 @@ python main.py
 ![results](lunar.png)
 
 ### Testing
-Best model:
+Best result:<br/>
 ![bets_results](lunar_lander.gif)
 
-Worst model:
+Worst result:<br/>
 ![worst_results](lunar_lander_worst.gif)
 
 
