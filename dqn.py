@@ -1,5 +1,8 @@
+from collections import deque, namedtuple
 import gc
+import math
 import pickle
+import random
 import time
 import numpy as np
 import torch
@@ -23,11 +26,14 @@ class DQNModel(nn.Module):
     x = self.fc3(x)
     return x
 
+Transition = namedtuple('Transition',
+                        ('state', 'action', 'next_state', 'reward'))
+
 class DQN:
   def __init__(
     self,
     state_dim,
-    action_number,
+    action_space,
     learning_rate=0.0001,
     epsilon = 1.0,
     epsilon_min=0.01,
@@ -36,7 +42,7 @@ class DQN:
     batch_size=128,
     buffer_size=2000,
   ): 
-    self.action_space = [i for i in range(action_number)]
+    self.action_space = action_space
     self.gamma = gamma
     self.epsilon = epsilon
     self.epsilon_decay = epsilon_decay
@@ -44,16 +50,18 @@ class DQN:
     self.batch_size = batch_size
     self.learning_rate = learning_rate
     
-    self.memory = ReplayMemory(state_dim, action_number, discrete=True, maxlen=buffer_size)
+    self.memory = deque([], maxlen=buffer_size)
 
-    self.network = self.build_model(state_dim, action_number)
-    self.target_net = self.build_model(state_dim, action_number)
+    self.network = self.build_model(state_dim, 4)
+    self.target_net = self.build_model(state_dim, 4)
     self.update_target_net()
     self.target_net.eval()
 
-    self.optimizer = optim.Adam(self.network.parameters(), lr=self.learning_rate)
+    self.optimizer = optim.AdamW(self.network.parameters(), lr=self.learning_rate, amsgrad = True)
+
+    self.steps = 0
     
-    self.loss_fn = nn.MSELoss()
+    self.loss_fn = nn.SmoothL1Loss()
   
   def build_model(self, state_dim, action_number):
     model = DQNModel(state_dim, action_number)
@@ -61,40 +69,57 @@ class DQN:
     return model
   
   def act(self, state):
-    state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
-    rand = torch.rand(1).item()
+    sample = random.random()
 
-    if rand < self.epsilon:
-      action = torch.randint(0, len(self.action_space), (1,)).item()
+    epsilon_trsh = self.epsilon_min + (self.epsilon - self.epsilon_min) * math.exp(-1. * self.steps / self.epsilon_decay)
+
+    self.steps += 1
+
+    if sample < epsilon_trsh:
+      action = torch.tensor([[self.action_space.sample()]], device = device, dtype=torch.long)
     else:
       with torch.no_grad():
-        action = self.network(state).argmax(1).item()
+        action = self.network(state).max(1)[1].view(1, 1)
 
     return action
   
-  def remember(self, state, action, reward, next_state, terminated, truncated):
-    self.memory.append(state, action, reward, next_state, terminated or truncated)
+  def preprocess_state(self, state):
+    if isinstance(state, np.ndarray):
+      state = tuple(state)
+    state = torch.tensor(state, dtype = torch.float32, device = device).unsqueeze(0)
+    return state
+  
+  def remember(self, state, action, reward, next_state):
+    reward = torch.tensor([reward], device = device)
+    self.memory.append(Transition(state, action, next_state, reward))
 
   def replay(self):
-    if self.memory.mem_counter < self.batch_size:
+    if len(self.memory) < self.batch_size:
       return
     
-    states, actions, rewards, next_states, dones = self.memory.sample(self.batch_size)
+    transitions = random.sample(self.memory,self.batch_size) 
+    batch = Transition(*zip(*transitions))
 
-    states = torch.tensor(states, dtype=torch.float32).to(device)
-    actions = torch.tensor(actions, dtype=torch.long).to(device)
-    rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1).to(device)
-    next_states = torch.tensor(next_states, dtype=torch.float32).to(device)
-    dones = torch.tensor(dones, dtype=torch.float32).unsqueeze(1).to(device)
+    non_final_mask = torch.tensor(tuple(map(lambda s: s is not None, batch.next_state)), device=device, dtype=bool)
+    non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
 
-    q_eval = self.network(states)
-    q_next = self.target_net(next_states)
-    q_target = rewards + self.gamma * q_next * (1 - dones)
+    state_batch = torch.cat(batch.state)
+    action_batch = torch.cat(batch.action)
+    reward_batch = torch.cat(batch.reward)
 
-    loss = self.loss_fn(q_eval, q_target)
+    state_action_values = self.network(state_batch).gather(1, action_batch)
+    next_state_values = torch.zeros(self.batch_size, device=device)
+    with torch.no_grad():
+      next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0]
+
+    expected_state_action = (next_state_values * self.gamma) + reward_batch
+
+    loss = self.loss_fn(state_action_values, expected_state_action.unsqueeze(1))
 
     self.optimizer.zero_grad()
     loss.backward()
+
+    torch.nn.utils.clip_grad_value_(self.network.parameters(), 100)
     self.optimizer.step()
 
     self.update_target_net(0.001)
