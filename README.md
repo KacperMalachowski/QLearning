@@ -23,5 +23,11 @@ python main.py
 
 ## Results
 
+### Training
+
+![results](lunar.png)
+
+### Testing
+
 ![results](lunar_lander.gif)
 

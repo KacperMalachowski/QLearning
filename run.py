@@ -2,6 +2,7 @@
 import gymnasium as gym
 import numpy as np
 from dqn import DQN
+from collections import namedtuple
 
 env = gym.make('LunarLander-v2', render_mode='rgb_array')
 
