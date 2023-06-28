@@ -1,7 +1,6 @@
 import gc
 import os
 from matplotlib import pyplot as plt
-from keras.callbacks import Callback
 import numpy as np
 import psutil
 
@@ -38,12 +37,3 @@ def plotLearning(x, scores, epsilons, filename, lines=None):
             plt.axvline(x=line)
 
     plt.savefig(filename)
-
-class MemoryUsageCallbackExtended(Callback):
-  def on_epoch_begin(self,epoch,logs=None):
-    print('**Epoch {}**'.format(epoch))
-    print('Memory usage on epoch begin: {}'.format(psutil.Process(os.getpid()).memory_info().rss))
-
-  def on_epoch_end(self,epoch,logs=None):
-    print('Memory usage on epoch end:   {}'.format(psutil.Process(os.getpid()).memory_info().rss))
-    gc.collect()
