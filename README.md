@@ -17,8 +17,14 @@ pip install -r requirements.txt
 
 ## Usage
 
+Run:
 ```bash
-python main.py
+python run.py
+```
+
+Train:
+```bash
+python train.py
 ```
 
 ## Results
