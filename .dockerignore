@@ -1,0 +1,25 @@
+__pycache__
+
+# PyInstaller stuff:
+build/
+dist/
+*.spec
+
+# C extensions
+*.so
+
+# Files
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.svg
+*.ipynb
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# VS Code
+.vscode/
