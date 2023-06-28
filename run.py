@@ -49,4 +49,8 @@ env.close()
 import imageio
 best_game = max(games, key=lambda g: g.reward)
 print(f"Best game: {best_game.reward}")
-imageio.mimsave('./best_game.gif', best_game.frames)
+imageio.mimsave('./lunar_lander.gif', best_game.frames)
+
+worst_game = min(games, key=lambda g: g.reward)
+print(f"Worst game: {worst_game.reward}")
+imageio.mimsave('./lunar_lander_worst.gif', worst_game.frames)

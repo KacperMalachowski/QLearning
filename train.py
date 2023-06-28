@@ -28,6 +28,7 @@ time_sum = 0
 total_rewards = []
 last_100_rewards = np.zeros((100,), dtype=float)
 eps_history = []
+x = []
 i = 1
 episodes = 500
 avg_reward = 0
@@ -68,8 +69,8 @@ try:
     print(" Reward: %.2f" % total_reward, "\n Avg Reward: %.2f" % avg_reward, "\n Last 100 Avg Reward: %.2f" % np.mean(last_100_rewards))
 
     i += 1
-
-  x = [j + 1 for j in range(episodes)]
+    x.append(i)
+    
   plotLearning(x, total_rewards, eps_history, "lunar.png")
 
   print(f"Solved in: {i} episodes!")
