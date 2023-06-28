@@ -11,6 +11,8 @@ from keras.callbacks import TensorBoard
 from keras import backend as BK
 from collections import deque
 
+from memory import ReplayMemory
+
 log_dir="logs/{}-{}".format("DQN", int(time.time()))
 
 class ModifiedTensorBoard(TensorBoard):
@@ -67,20 +69,15 @@ class DQN:
   def __init__(
     self,
     state_dim,
-    action_dim = [
-      (-1, 1, 0.2), (0, 1, 0.2), (1, 1, 0.2),
-      (-1, 1, 0), (0, 1, 0), (1, 1, 0),
-      (-1, 0, 0.2), (0, 0, 0.2), (1, 0, 0.2),
-      (-1, 0, 0), (0, 0, 0), (1, 0, 0)
-    ],
-    learning_rate=0.0000025,
+    action_dim,
+    learning_rate=0.0001,
     epsilon = 1.0,
     epsilon_min=0.01,
-    epsilon_decay=0.9999,
-    gamma=0.95,
-    batch_size=256,
+    epsilon_decay=0.999,
+    gamma=0.99,
+    batch_size=128,
     warmup_steps=1000,
-    buffer_size=2500,
+    buffer_size=2000,
     target_update_interval=1000,
   ): 
     self.action_dim = action_dim
@@ -95,7 +92,7 @@ class DQN:
     self.target_network = self.build_model(state_dim, action_dim)
     self._update_target_model(tau=1.0)
 
-    self.buffer = deque(maxlen=buffer_size)
+    self.buffer = ReplayMemory(maxlen=buffer_size)
 
     self.total_steps = 0
     self.epsilon_min = epsilon_min
@@ -106,54 +103,49 @@ class DQN:
   
   def build_model(self, state_dim, action_dim):
     model = Sequential()
-    model.add(Reshape(target_shape=(*state_dim, 1), input_shape=state_dim, name='layers_reshape'))
-    model.add(Flatten(name='layes_flatten'))
-    model.add(Dense(5, activation='relu', name = 'layers_dense'))
-    model.add(Dense(len(action_dim), activation='linear', name = 'layers_action_dense'))
-    model.compile(loss='categorical_crossentropy', optimizer=Adam(learning_rate=self.learning_rate), metrics=['accuracy'])
+    model.add(Dense(64, activation='relu', input_shape=state_dim))
+    model.add(Dense(64, activation='relu'))
+    model.add(Dense(action_dim.n, activation='linear'))
+    model.compile(loss='mae', optimizer=Adam(learning_rate=self.learning_rate), metrics=['accuracy'])
     return model
   
   def act(self, state, training=True):
     if training and np.random.rand() < self.epsilon:
-      action = random.randrange(len(self.action_dim))
+      action = random.randrange(self.action_dim.n)
     else:
-      action_probs = self.network.predict(state, verbose=0)
+      action_probs = self.network.predict(np.expand_dims(state, axis=0), verbose=0)
       action = np.argmax(action_probs[0])
-      print(action)
-      print(self.action_dim[action])
-    return self.action_dim[action]
+    return action
   
   def remember(self, state, action, reward, next_state, terminated, truncated):
-    self.buffer.append((state, self.action_dim.index(action), reward, next_state, terminated, truncated))
+    self.buffer.append((state, action, reward, next_state, terminated, truncated))
     self.total_steps += 1
 
   def replay(self):
     if len(self.buffer) < self.batch_size:
       return
     
-    sample_batch = random.sample(self.buffer, self.batch_size)
+    sample_batch = self.buffer.sample(batch_size=self.batch_size)
 
     states = []
     targets = []
 
     for state, action, reward, next_state, terminated, truncated in sample_batch:
-      target = self.network.predict(state, verbose=0)[0]
+      target = self.network.predict(np.expand_dims(state, axis=0), verbose= 0)
       if terminated or truncated:
-        target[action] = reward
+        target[0][action] = reward
       else:
-        next_q_values = self.target_network.predict(next_state, verbose=0)[0]
-        target[action] = reward + self.gamma * np.amax(next_q_values)
+        next_q_values = self.target_network.predict(np.expand_dims(state, axis=0), verbose=0)
+        target[0][action] = reward + self.gamma * np.amax(next_q_values)
 
-      states.append(state[0])
+      states.append(state)
       targets.append(target)
 
     self.network.fit(
       tf.stack(states),
       tf.stack(targets),
       epochs=1,
-      verbose=0,
-      callbacks=[self.tensorboard],
-      validation_split=0.1
+      callbacks=[self.tensorboard]
     )
 
     if self.total_steps % self.target_update_interval == 0:

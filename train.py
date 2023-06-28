@@ -2,16 +2,12 @@ import os
 import time
 import gymnasium as gym
 import tensorflow as tf
-from env import ImageEnv
 from dqn import DQN
 
-env = gym.make('CarRacing-v2')
-env = ImageEnv(env)
-
-state_dim = (84, 84)
+env = gym.make('LunarLander-v2')
 episodes = 1000
 
-agent = DQN(state_dim)
+agent = DQN(env.observation_space.shape, env.action_space)
 if os.path.isfile('./dqn.h5'):
   agent.load('./dqn.h5')
 
@@ -46,6 +42,7 @@ try:
 
     agent.tensorboard.update_stats(reward=total_reward,reward_min=min(total_rewards), reward_max=max(total_rewards), reward_avg=sum(total_rewards)/len(total_rewards), epsilon=agent.epsilon)
     agent.replay()
+    print(f" {agent.buffer.__len__()}")
     i += 1
 finally:
   agent.save("dqn.h5")
