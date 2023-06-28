@@ -12,31 +12,40 @@ agent = DQN(
 
 agent.load('./dqn.h5')
 
-state, info = env.reset(seed=4)
-state = agent.preprocess_state(state)
+Game = namedtuple('Game', ['reward', 'frames'])
+n_games = 10
+games = []
 
-done = False
-total_reward = 0
-frames = []
+for g in range(n_games):
+  state, info = env.reset(seed=4)
+  state = agent.preprocess_state(state)
+  done = False
+  total_reward = 0
+  frames = []
 
-while not done:
-  action = agent.act(state)
-  next_state, reward, terminated, truncated, _ = env.step(action.item())
-  done = terminated or truncated
+  while not done:
+    action = agent.act(state)
+    next_state, reward, terminated, truncated, _ = env.step(action.item())
+    done = terminated or truncated
 
-  next_state = agent.preprocess_state(next_state)
+    next_state = agent.preprocess_state(next_state)
 
-  if done:
-    next_state = None
+    if done:
+      next_state = None
 
-  state = next_state
-  total_reward += reward
-  frames.append(env.render())
+    state = next_state
+    total_reward += reward
+    frames.append(env.render())
 
-print(f"Total reward: {total_reward}")
+  print(f"Total reward: {total_reward}")
+  games.append(Game(total_reward, frames))
+
+
 
 env.close()
 
-# Save video
+# Save video of the best game
 import imageio
-imageio.mimsave('./lunar_lander.gif', frames)
+best_game = max(games, key=lambda g: g.reward)
+print(f"Best game: {best_game.reward}")
+imageio.mimsave('./best_game.gif', best_game.frames)
